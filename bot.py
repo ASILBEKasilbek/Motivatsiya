@@ -258,9 +258,9 @@ async def done_report(callback: CallbackQuery):
 
     # --- kodning asosiy qismi (async kontekstda) ---
     text = (
-        f"> 👤 *{escape_md_v2(ism)}*\n"
-        f"> 📌 *DAY {escape_md_v2(kun)}*\n"
-        f"> 📣 *Bugungi reja 📝*\n"
+        f"> 👤 *{escape_md_v2(ism)}*\n\n"
+        f"> 📌 *DAY {escape_md_v2(kun)}*\n\n"
+        f"> 📣 *Bugungi reja 📝*\n\n"
         ">\n"
     )
 
@@ -271,13 +271,13 @@ async def done_report(callback: CallbackQuery):
         # list raqamidan keyingi nuqtani ham escape qilib qo'ydim (i\. ) — xato chiqqan joylardan biri edi
         text += f"> {escape_md_v2(i)}\\. {subject} – {pomidor} ta 🍅 {status}\n"
 
-    text += f">\n> *Jami:* {escape_md_v2(jami_pomidor)} ta pomidor 🍅\n"
+    text += f">\n> *Jami:* {escape_md_v2(jami_pomidor)} ta pomidor 🍅\n\n"
 
     # raqamli qiymatlarni avval formatlab, keyin escape qiling
     dev_str = escape_md_v2(f"{development_level:.1f}")   # nuqta -> \.
     hours_str = escape_md_v2(f"{hours_spent:.2f}")
 
-    text += f"> 📈 Bugungi rivojlanish darajasi: {dev_str}%\n"
+    text += f"> 📈 Bugungi rivojlanish darajasi: {dev_str}%\n\n"
     text += f"> ⏳ Bugun o‘qishga sarflangan vaqt: {hours_str} soat\n\n"
 
     # Sana: strftime() natijasini escape qilamiz
