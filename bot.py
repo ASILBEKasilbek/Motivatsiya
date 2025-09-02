@@ -256,7 +256,10 @@ async def done_report(callback: CallbackQuery):
 
     # Sana alohida quote qatorida
     # text += f"> 📅 Sana: {report_date.strftime('%d.%m.%Y')}"
-    text += f"> 📅 Sana: {report_date.strftime('%d\\. %m\\. %Y')}"
+    # text += f"> 📅 Sana: {report_date.strftime('%d\\. %m\\. %Y')}"
+    # Sana alohida quote qatorida
+    date_str = report_date.strftime("%d.%m.%Y").replace(".", "\\.")
+    text += f"> 📅 Sana: {date_str}"
 
     topic = TOPIC_NORMAL
     if jami_pomidor <= min_p:
