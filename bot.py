@@ -390,10 +390,20 @@ def setup_scheduler():
     scheduler.add_job(send_reports, "cron", hour=0, minute=0)
     scheduler.start()
     return scheduler
+from aiogram.types import BotCommand
+
+async def set_default_commands(bot: Bot) -> None:
+    commands = [
+        BotCommand(command="start", description="⚪️ Botni ishga tushirish"),
+        BotCommand(command="admin", description="🔧 Admin paneli (adminlar uchun)")
+    ]
+    await bot.set_my_commands(commands)
 
 # ---------------- MAIN ----------------
 async def main():
     init_db()
+    await set_default_commands(bot)
+
     setup_scheduler()
     print("🤖 Bot ishga tushdi...")
     await dp.start_polling(bot)
