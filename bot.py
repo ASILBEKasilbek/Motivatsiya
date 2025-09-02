@@ -255,7 +255,8 @@ async def done_report(callback: CallbackQuery):
     text += f"> ⏳ Bugun o‘qishga sarflangan vaqt: {hours_spent:.2f} soat\n\n"
 
     # Sana alohida quote qatorida
-    text += f"> 📅 Sana: {report_date.strftime('%d.%m.%Y')}"
+    # text += f"> 📅 Sana: {report_date.strftime('%d.%m.%Y')}"
+    text += f"> 📅 Sana: {report_date.strftime('%d\\. %m\\. %Y')}"
 
     topic = TOPIC_NORMAL
     if jami_pomidor <= min_p:
