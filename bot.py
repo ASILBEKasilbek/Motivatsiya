@@ -242,14 +242,20 @@ async def done_report(callback: CallbackQuery):
     hours_spent = (jami_pomidor * 25) / 60
     development_level = kun * 0.1
 
-    text = f"👤 <b>{ism}</b>\n📌 <b>DAY {kun}</b>\n📣 <b>Bugungi reja 📝</b>\n\n"
+    text = f"> 👤 *{ism}*\n" \
+        f"> 📌 *DAY {kun}*\n" \
+        f"> 📣 *Bugungi reja 📝*\n>\n"
+
     for i, entry in enumerate(entries, 1):
         status = "✅" if entry["completed"] else "❌"
-        text += f"{i}. {entry['subject']} – {entry['pomidor']} ta 🍅 {status}\n"
-    text += f"\n<b>Jami:</b> {jami_pomidor} ta pomidor 🍅\n"
-    text += f"📈 <i>Bugungi rivojlanish darajasi:</i> {development_level:.1f}%\n"
-    text += f"⏳ <i>Bugun o‘qishga sarflangan vaqt:</i> {hours_spent:.2f} soat\n"
-    text += f"📅 <i>Sana:</i> {report_date.strftime('%d.%m.%Y')}"
+        text += f"> {i}. {entry['subject']} – {entry['pomidor']} ta 🍅 {status}\n"
+
+    text += f">\n> *Jami:* {jami_pomidor} ta pomidor 🍅\n"
+    text += f"> 📈 Bugungi rivojlanish darajasi: {development_level:.1f}%\n"
+    text += f"> ⏳ Bugun o‘qishga sarflangan vaqt: {hours_spent:.2f} soat\n\n"
+
+    # Sana alohida quote qatorida
+    text += f"> 📅 Sana: {report_date.strftime('%d.%m.%Y')}"
 
     topic = TOPIC_NORMAL
     if jami_pomidor <= min_p:
@@ -257,7 +263,12 @@ async def done_report(callback: CallbackQuery):
     elif jami_pomidor >= max_p:
         topic = TOPIC_MAX
 
-    await bot.send_message(CHAT_ID, text, message_thread_id=topic)
+    await bot.send_message(
+        CHAT_ID,
+        text,
+        message_thread_id=topic,
+        parse_mode="MarkdownV2"
+    )
     conn.close()
     del user_sessions[user_id]
     await callback.message.answer("✅ Hisobot muvaffaqiyatli yuborildi!")
