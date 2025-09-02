@@ -241,38 +241,64 @@ async def done_report(callback: CallbackQuery):
     jami_pomidor = sum(entry["pomidor"] for entry in entries)
     hours_spent = (jami_pomidor * 25) / 60
     development_level = kun * 0.1
+    # yordamchi funksiyalar
+    def escape_md_v2(text: object) -> str:
+        """
+        Escape text for Telegram MarkdownV2.
+        Accepts any object (we'll convert to str).
+        """
+        if text is None:
+            return ""
+        s = str(text)
+        # Bu belgilar MarkdownV2 da escape qilinishi kerak
+        escape_chars = "_*[]()~`>#+-=|{}.!"
+        for ch in escape_chars:
+            s = s.replace(ch, "\\" + ch)
+        return s
 
-    text = f"> 👤 *{ism}*\n" \
-        f"> 📌 *DAY {kun}*\n" \
-        f"> 📣 *Bugungi reja 📝*\n>\n"
+    # --- kodning asosiy qismi (async kontekstda) ---
+    text = (
+        f"> 👤 *{escape_md_v2(ism)}*\n"
+        f"> 📌 *DAY {escape_md_v2(kun)}*\n"
+        f"> 📣 *Bugungi reja 📝*\n"
+        ">\n"
+    )
 
     for i, entry in enumerate(entries, 1):
-        status = "✅" if entry["completed"] else "❌"
-        text += f"> {i}. {entry['subject']} – {entry['pomidor']} ta 🍅 {status}\n"
+        subject = escape_md_v2(entry.get("subject", ""))
+        pomidor = escape_md_v2(entry.get("pomidor", ""))
+        status = "✅" if entry.get("completed") else "❌"
+        # list raqamidan keyingi nuqtani ham escape qilib qo'ydim (i\. ) — xato chiqqan joylardan biri edi
+        text += f"> {escape_md_v2(i)}\\. {subject} – {pomidor} ta 🍅 {status}\n"
 
-    text += f">\n> *Jami:* {jami_pomidor} ta pomidor 🍅\n"
-    text += f"> 📈 Bugungi rivojlanish darajasi: {development_level:.1f}%\n"
-    text += f"> ⏳ Bugun o‘qishga sarflangan vaqt: {hours_spent:.2f} soat\n\n"
+    text += f">\n> *Jami:* {escape_md_v2(jami_pomidor)} ta pomidor 🍅\n"
 
-    # Sana alohida quote qatorida
-    # text += f"> 📅 Sana: {report_date.strftime('%d.%m.%Y')}"
-    # text += f"> 📅 Sana: {report_date.strftime('%d\\. %m\\. %Y')}"
-    # Sana alohida quote qatorida
-    date_str = report_date.strftime("%d.%m.%Y").replace(".", "\\.")
+    # raqamli qiymatlarni avval formatlab, keyin escape qiling
+    dev_str = escape_md_v2(f"{development_level:.1f}")   # nuqta -> \.
+    hours_str = escape_md_v2(f"{hours_spent:.2f}")
+
+    text += f"> 📈 Bugungi rivojlanish darajasi: {dev_str}%\n"
+    text += f"> ⏳ Bugun o‘qishga sarflangan vaqt: {hours_str} soat\n\n"
+
+    # Sana: strftime() natijasini escape qilamiz
+    date_str = escape_md_v2(report_date.strftime("%d.%m.%Y"))
     text += f"> 📅 Sana: {date_str}"
 
+    # topic aniqlash (sizdagi mantiq bilan bir xil)
     topic = TOPIC_NORMAL
     if jami_pomidor <= min_p:
         topic = TOPIC_MIN
     elif jami_pomidor >= max_p:
         topic = TOPIC_MAX
 
+    # yuborish
     await bot.send_message(
         CHAT_ID,
         text,
         message_thread_id=topic,
         parse_mode="MarkdownV2"
     )
+
     conn.close()
     del user_sessions[user_id]
     await callback.message.answer("✅ Hisobot muvaffaqiyatli yuborildi!")
