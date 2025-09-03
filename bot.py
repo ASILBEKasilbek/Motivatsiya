@@ -644,21 +644,21 @@ async def send_reports():
     cursor.execute("SELECT SUM(pomidor) FROM daily_reports WHERE report_date = ?", (today,))
     total_pomidors = cursor.fetchone()[0] or 0
 
+    # Format message in quote style with MarkdownV2
     text = (
-        f"📊 <b>Kunlik hisobot</b> – Sana: {today.strftime('%d.%m.%Y')}\n\n"
-        f"👥 <b>Jami a'zolar:</b> {total_users} ta\n"
-        f"📈 <b>Faol ishtirokchilar:</b> {active_users} ta\n"
-        f"🍅 <b>Jami pomidorlar:</b> {total_pomidors} ta\n\n"
-        f"🏆 <b>Top 6 ishtirokchilar:</b>\n"
+        f"> 📊 *Kunlik hisobot*\n\n"
+        f"> 👥 *Jami a'zolar:* {escape_md_v2(total_users)} ta\n\n"
+        f"> 📈 *Faol ishtirokchilar:* {escape_md_v2(active_users)} ta\n\n"
+        f"> 🍅 *Jami pomidorlar:* {escape_md_v2(total_pomidors)} ta\n\n"
+        f"> 🏆 *Top 6 ishtirokchilar:*\n"
     )
     for i, (ism, total) in enumerate(top_users, 1):
         total = total or 0
-        text += f"{i}. {ism} – {total} ta 🍅\n"
-    text += f"\n📅 <i>Sana:</i> {today.strftime('%d.%m.%Y')}"
+        text += f"> {escape_md_v2(i)}\\. {escape_md_v2(ism)} – {escape_md_v2(total)} ta 🍅\n"
+    text += f">\n> 📅 *Sana:* {escape_md_v2(today.strftime('%d.%m.%Y'))}"
 
-    await bot.send_message(CHAT_ID, text, message_thread_id=TOPIC_JADVAL)
+    await bot.send_message(CHAT_ID, text, message_thread_id=TOPIC_JADVAL, parse_mode="MarkdownV2")
     conn.close()
-
 # ---------------- SCHEDULER ----------------
 def setup_scheduler():
     scheduler = AsyncIOScheduler(timezone="Asia/Tashkent")
