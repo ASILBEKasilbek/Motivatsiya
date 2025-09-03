@@ -2,7 +2,7 @@ import sqlite3
 import asyncio
 from datetime import datetime, date
 from aiogram import Bot, Dispatcher, F
-from aiogram.types import Message, InlineKeyboardButton, InlineKeyboardMarkup, CallbackQuery
+from aiogram.types import Message, InlineKeyboardButton, InlineKeyboardMarkup, CallbackQuery, BotCommand
 from aiogram.filters import Command
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from dotenv import load_dotenv
@@ -19,6 +19,7 @@ TOPIC_JADVAL = int(os.getenv("TOPIC_JADVAL", 0))
 TOPIC_MIN = int(os.getenv("TOPIC_MIN", 0))
 TOPIC_NORMAL = int(os.getenv("TOPIC_NORMAL", 0))
 TOPIC_MAX = int(os.getenv("TOPIC_MAX", 0))
+ADMIN_IDS = [int(id) for id in os.getenv("ADMIN_IDS", "").split(",") if id.strip().isdigit()]
 
 bot = Bot(API_TOKEN, default=DefaultBotProperties(parse_mode="HTML"))
 dp = Dispatcher()
@@ -79,7 +80,265 @@ def get_user_day(user_id: int) -> int:
         return start_day + days_passed
     return 1
 
-# ---------------- HANDLERS ----------------
+def escape_md_v2(text: object) -> str:
+    """Escape text for Telegram MarkdownV2."""
+    if text is None:
+        return ""
+    s = str(text)
+    escape_chars = "_*[]()~`>#+-=|{}.!"
+    for ch in escape_chars:
+        s = s.replace(ch, "\\" + ch)
+    return s
+
+# ---------------- ADMIN PANEL ----------------
+def is_admin(user_id: int) -> bool:
+    """Check if user is an admin."""
+    return user_id in ADMIN_IDS
+
+@dp.message(Command("admin"))
+async def admin_panel(msg: Message):
+    if not is_admin(msg.from_user.id):
+        await msg.answer("⚠️ Sizda admin huquqlari yo‘q!")
+        return
+
+    keyboard = InlineKeyboardMarkup(inline_keyboard=[
+        [InlineKeyboardButton(text="📊 Umumiy statistika", callback_data="admin_stats")],
+        [InlineKeyboardButton(text="👥 Foydalanuvchilarni boshqarish", callback_data="admin_users")],
+        [InlineKeyboardButton(text="📢 E'lon yuborish", callback_data="admin_broadcast")],
+        [InlineKeyboardButton(text="📅 Hisobotlar", callback_data="admin_reports")]
+    ])
+    await msg.answer(
+        "<b>🔧 Admin Paneli</b>\n\n"
+        "Quyidagi funksiyalardan birini tanlang:",
+        reply_markup=keyboard
+    )
+
+@dp.callback_query(F.data == "admin_stats")
+async def admin_stats(callback: CallbackQuery):
+    if not is_admin(callback.from_user.id):
+        await callback.message.answer("⚠️ Sizda admin huquqlari yo‘q!")
+        await callback.answer()
+        return
+
+    conn = sqlite3.connect("daily_reports.db")
+    cursor = conn.cursor()
+
+    cursor.execute("SELECT COUNT(*) FROM users")
+    total_users = cursor.fetchone()[0]
+
+    cursor.execute("SELECT COUNT(DISTINCT user_id) FROM daily_reports WHERE report_date = ?", (date.today(),))
+    active_users = cursor.fetchone()[0]
+
+    cursor.execute("SELECT SUM(pomidor) FROM daily_reports WHERE report_date = ?", (date.today(),))
+    total_pomidors = cursor.fetchone()[0] or 0
+
+    cursor.execute("""
+        SELECT u.ism, SUM(d.pomidor) as total
+        FROM users u
+        LEFT JOIN daily_reports d ON u.id = d.user_id
+        GROUP BY u.id, u.ism
+        ORDER BY total DESC
+        LIMIT 5
+    """)
+    top_users = cursor.fetchall()
+
+    conn.close()
+
+    text = (
+        f"📊 <b>Umumiy Statistikalar</b>\n\n"
+        f"👥 Jami foydalanuvchilar: {total_users} ta\n"
+        f"📈 Bugun faol foydalanuvchilar: {active_users} ta\n"
+        f"🍅 Bugungi jami pomidorlar: {total_pomidors} ta\n\n"
+        f"🏆 Top 5 foydalanuvchilar (jami pomidorlar):\n"
+    )
+    for i, (ism, total) in enumerate(top_users, 1):
+        total = total or 0
+        text += f"{i}. {ism} – {total} ta 🍅\n"
+
+    await callback.message.answer(text)
+    await callback.answer()
+
+@dp.callback_query(F.data == "admin_users")
+async def admin_users(callback: CallbackQuery):
+    if not is_admin(callback.from_user.id):
+        await callback.message.answer("⚠️ Sizda admin huquqlari yo‘q!")
+        await callback.answer()
+        return
+
+    keyboard = InlineKeyboardMarkup(inline_keyboard=[
+        [InlineKeyboardButton(text="📋 Foydalanuvchilar ro‘yxati", callback_data="list_users")],
+        [InlineKeyboardButton(text="🗑 Foydalanuvchini o‘chirish", callback_data="delete_user")],
+        [InlineKeyboardButton(text="🔙 Orqaga", callback_data="back_to_admin")]
+    ])
+    await callback.message.answer(
+        "<b>👥 Foydalanuvchilarni boshqarish</b>\n\n"
+        "Quyidagi amallardan birini tanlang:",
+        reply_markup=keyboard
+    )
+    await callback.answer()
+
+@dp.callback_query(F.data == "list_users")
+async def list_users(callback: CallbackQuery):
+    if not is_admin(callback.from_user.id):
+        await callback.message.answer("⚠️ Sizda admin huquqlari yo‘q!")
+        await callback.answer()
+        return
+
+    conn = sqlite3.connect("daily_reports.db")
+    cursor = conn.cursor()
+    cursor.execute("SELECT id, ism, familya, username FROM users")
+    users = cursor.fetchall()
+    conn.close()
+
+    if not users:
+        await callback.message.answer("📋 Foydalanuvchilar ro‘yxati bo‘sh!")
+        await callback.answer()
+        return
+
+    text = "<b>📋 Foydalanuvchilar ro‘yxati</b>\n\n"
+    for user in users:
+        user_id, ism, familya, username = user
+        text += f"ID: {user_id} | {ism} {familya} | @{username}\n"
+
+    await callback.message.answer(text)
+    await callback.answer()
+
+@dp.callback_query(F.data == "delete_user")
+async def prompt_delete_user(callback: CallbackQuery):
+    if not is_admin(callback.from_user.id):
+        await callback.message.answer("⚠️ Sizda admin huquqlari yo‘q!")
+        await callback.answer()
+        return
+
+    await callback.message.answer(
+        "O‘chiriladigan foydalanuvchi ID sini yuboring.\n"
+        "Masalan: <code>123</code>"
+    )
+    await callback.answer()
+
+@dp.message(F.text.regexp(r"^\d+$"))
+async def delete_user(msg: Message):
+    if not is_admin(msg.from_user.id):
+        await msg.answer("⚠️ Sizda admin huquqlari yo‘q!")
+        return
+
+    user_id = int(msg.text)
+    conn = sqlite3.connect("daily_reports.db")
+    cursor = conn.cursor()
+    cursor.execute("SELECT id, ism FROM users WHERE id = ?", (user_id,))
+    user = cursor.fetchone()
+
+    if not user:
+        await msg.answer(f"⚠️ ID {user_id} ga ega foydalanuvchi topilmadi!")
+        conn.close()
+        return
+
+    cursor.execute("DELETE FROM daily_reports WHERE user_id = ?", (user_id,))
+    cursor.execute("DELETE FROM users WHERE id = ?", (user_id,))
+    conn.commit()
+    conn.close()
+
+    await msg.answer(f"✅ Foydalanuvchi {user[1]} (ID: {user_id}) muvaffaqiyatli o‘chirildi!")
+
+@dp.callback_query(F.data == "admin_broadcast")
+async def prompt_broadcast(callback: CallbackQuery):
+    if not is_admin(callback.from_user.id):
+        await callback.message.answer("⚠️ Sizda admin huquqlari yo‘q!")
+        await callback.answer()
+        return
+
+    await callback.message.answer(
+        "E'lon matnini yuboring:\n"
+        "Masalan: <code>E'lon: Yangi funksiyalar qo‘shildi!</code>"
+    )
+    await callback.answer()
+
+@dp.message(F.text.startswith("E'lon:"))
+async def send_broadcast(msg: Message):
+    if not is_admin(msg.from_user.id):
+        await msg.answer("⚠️ Sizda admin huquqlari yo‘q!")
+        return
+
+    broadcast_message = msg.text.replace("E'lon:", "").strip()
+    if not broadcast_message:
+        await msg.answer("⚠️ E'lon matni bo‘sh bo‘lmasligi kerak!")
+        return
+
+    conn = sqlite3.connect("daily_reports.db")
+    cursor = conn.cursor()
+    cursor.execute("SELECT username FROM users")
+    users = cursor.fetchall()
+    conn.close()
+
+    sent_count = 0
+    for user in users:
+        try:
+            user_id = user[0] if not user[0].startswith("@") else user[0][1:]
+            await bot.send_message(
+                user_id,
+                f"📢 <b>E'lon:</b> {broadcast_message}"
+            )
+            sent_count += 1
+        except Exception as e:
+            print(f"E'lon yuborishda xatolik (user: {user[0]}): {str(e)}")
+
+    await msg.answer(f"✅ E'lon {sent_count} ta foydalanuvchiga yuborildi!")
+
+@dp.callback_query(F.data == "admin_reports")
+async def admin_reports(callback: CallbackQuery):
+    if not is_admin(callback.from_user.id):
+        await callback.message.answer("⚠️ Sizda admin huquqlari yo‘q!")
+        await callback.answer()
+        return
+
+    conn = sqlite3.connect("daily_reports.db")
+    cursor = conn.cursor()
+    cursor.execute("""
+        SELECT u.ism, d.kun, d.subject, d.pomidor, d.completed, d.report_date
+        FROM daily_reports d
+        JOIN users u ON d.user_id = u.id
+        WHERE d.report_date = ?
+        ORDER BY d.created_at DESC
+        LIMIT 10
+    """, (date.today(),))
+    reports = cursor.fetchall()
+    conn.close()
+
+    if not reports:
+        await callback.message.answer("📅 Bugungi hisobotlar topilmadi!")
+        await callback.answer()
+        return
+
+    text = "<b>📅 Bugungi hisobotlar (oxirgi 10 ta)</b>\n\n"
+    for report in reports:
+        ism, kun, subject, pomidor, completed, report_date = report
+        status = "✅" if completed else "❌"
+        text += f"👤 {ism} | Day {kun} | {subject} | {pomidor} 🍅 | {status} | {report_date}\n"
+
+    await callback.message.answer(text)
+    await callback.answer()
+
+@dp.callback_query(F.data == "back_to_admin")
+async def back_to_admin(callback: CallbackQuery):
+    if not is_admin(callback.from_user.id):
+        await callback.message.answer("⚠️ Sizda admin huquqlari yo‘q!")
+        await callback.answer()
+        return
+
+    keyboard = InlineKeyboardMarkup(inline_keyboard=[
+        [InlineKeyboardButton(text="📊 Umumiy statistika", callback_data="admin_stats")],
+        [InlineKeyboardButton(text="👥 Foydalanuvchilarni boshqarish", callback_data="admin_users")],
+        [InlineKeyboardButton(text="📢 E'lon yuborish", callback_data="admin_broadcast")],
+        [InlineKeyboardButton(text="📅 Hisobotlar", callback_data="admin_reports")]
+    ])
+    await callback.message.answer(
+        "<b>🔧 Admin Paneli</b>\n\n"
+        "Quyidagi funksiyalardan birini tanlang:",
+        reply_markup=keyboard
+    )
+    await callback.answer()
+
+# ---------------- EXISTING HANDLERS ----------------
 @dp.message(Command("start"))
 async def start_cmd(msg: Message):
     keyboard = InlineKeyboardMarkup(inline_keyboard=[
@@ -241,22 +500,7 @@ async def done_report(callback: CallbackQuery):
     jami_pomidor = sum(entry["pomidor"] for entry in entries)
     hours_spent = (jami_pomidor * 25) / 60
     development_level = kun * 0.1
-    # yordamchi funksiyalar
-    def escape_md_v2(text: object) -> str:
-        """
-        Escape text for Telegram MarkdownV2.
-        Accepts any object (we'll convert to str).
-        """
-        if text is None:
-            return ""
-        s = str(text)
-        # Bu belgilar MarkdownV2 da escape qilinishi kerak
-        escape_chars = "_*[]()~`>#+-=|{}.!"
-        for ch in escape_chars:
-            s = s.replace(ch, "\\" + ch)
-        return s
 
-    # --- kodning asosiy qismi (async kontekstda) ---
     text = (
         f"> 👤 *{escape_md_v2(ism)}*\n\n"
         f"> 📌 *DAY {escape_md_v2(kun)}*\n\n"
@@ -268,30 +512,22 @@ async def done_report(callback: CallbackQuery):
         subject = escape_md_v2(entry.get("subject", ""))
         pomidor = escape_md_v2(entry.get("pomidor", ""))
         status = "✅" if entry.get("completed") else "❌"
-        # list raqamidan keyingi nuqtani ham escape qilib qo'ydim (i\. ) — xato chiqqan joylardan biri edi
         text += f"> {escape_md_v2(i)}\\. {subject} – {pomidor} ta 🍅 {status}\n"
 
     text += f">\n> *Jami:* {escape_md_v2(jami_pomidor)} ta pomidor 🍅\n\n"
-
-    # raqamli qiymatlarni avval formatlab, keyin escape qiling
-    dev_str = escape_md_v2(f"{development_level:.1f}")   # nuqta -> \.
+    dev_str = escape_md_v2(f"{development_level:.1f}")
     hours_str = escape_md_v2(f"{hours_spent:.2f}")
-
     text += f"> 📈 Bugungi rivojlanish darajasi: {dev_str}%\n\n"
     text += f"> ⏳ Bugun o‘qishga sarflangan vaqt: {hours_str} soat\n\n"
-
-    # Sana: strftime() natijasini escape qilamiz
     date_str = escape_md_v2(report_date.strftime("%d.%m.%Y"))
     text += f"> 📅 Sana: {date_str}"
 
-    # topic aniqlash (sizdagi mantiq bilan bir xil)
     topic = TOPIC_NORMAL
     if jami_pomidor <= min_p:
         topic = TOPIC_MIN
     elif jami_pomidor >= max_p:
         topic = TOPIC_MAX
 
-    # yuborish
     await bot.send_message(
         CHAT_ID,
         text,
@@ -306,9 +542,8 @@ async def done_report(callback: CallbackQuery):
 
 @dp.message()
 async def register_user(msg: Message):
-    # Skip if the message matches the report format
     if re.match(r"(.+),\s*(\d+),\s*(✅|❌)", msg.text):
-        return  # Let the report handler deal with it
+        return
 
     parts = msg.text.split(",")
     if len(parts) == 7:
@@ -431,11 +666,11 @@ def setup_scheduler():
     scheduler.add_job(send_reports, "cron", hour=0, minute=0)
     scheduler.start()
     return scheduler
-from aiogram.types import BotCommand
 
 async def set_default_commands(bot: Bot) -> None:
     commands = [
         BotCommand(command="start", description="⚪️ Botni ishga tushirish"),
+        BotCommand(command="report", description="📝 Hisobot yuborish"),
         BotCommand(command="admin", description="🔧 Admin paneli (adminlar uchun)")
     ]
     await bot.set_my_commands(commands)
@@ -444,7 +679,6 @@ async def set_default_commands(bot: Bot) -> None:
 async def main():
     init_db()
     await set_default_commands(bot)
-
     setup_scheduler()
     print("🤖 Bot ishga tushdi...")
     await dp.start_polling(bot)
