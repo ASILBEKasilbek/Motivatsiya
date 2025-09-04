@@ -527,13 +527,17 @@ async def done_report(callback: CallbackQuery):
         topic = TOPIC_MIN
     elif jami_pomidor >= max_p:
         topic = TOPIC_MAX
-
     await bot.send_message(
-        CHAT_ID,
+        -1002771365578,
         text,
-        message_thread_id=topic,
         parse_mode="MarkdownV2"
     )
+    # await bot.send_message(
+    #     CHAT_ID,
+    #     text,
+    #     message_thread_id=topic,
+    #     parse_mode="MarkdownV2"
+    # )
 
     conn.close()
     del user_sessions[user_id]
@@ -650,7 +654,7 @@ async def send_reports():
         f"> 👥 *Jami a'zolar:* {escape_md_v2(total_users)} ta\n\n"
         f"> 📈 *Faol ishtirokchilar:* {escape_md_v2(active_users)} ta\n\n"
         f"> 🍅 *Jami pomidorlar:* {escape_md_v2(total_pomidors)} ta\n\n"
-        f"> 🏆 *Top 6 ishtirokchilar:*\n"
+        f"> 🏆 *Top 5 ishtirokchilar:*\n"
     )
     for i, (ism, total) in enumerate(top_users, 1):
         total = total or 0
